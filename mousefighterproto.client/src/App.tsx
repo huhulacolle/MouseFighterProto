@@ -130,7 +130,7 @@ export default function App() {
           onMouseMove={handleMouseMove}
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
-          className="border w-[1080] h-[720]"
+          className="border w-[1080] h-[720] cursor-none"
         />
       ) : (
         ""
