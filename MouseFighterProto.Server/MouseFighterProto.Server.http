@@ -1,0 +1,6 @@
+@MouseFighterProto.Server_HostAddress = http://localhost:5288
+
+GET {{MouseFighterProto.Server_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

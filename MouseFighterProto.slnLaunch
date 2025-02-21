@@ -1,0 +1,11 @@
+[
+  {
+    "Name": "Nouveau profil",
+    "Projects": [
+      {
+        "Path": "MouseFighterProto.Server\\MouseFighterProto.Server.csproj",
+        "Action": "Start"
+      }
+    ]
+  }
+]
