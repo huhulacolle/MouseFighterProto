@@ -5,7 +5,7 @@ services:
     image: mouse-attack:proto
     build:
       context: .
-      dockerfile: ./Dockerfile
+      dockerfile: ./MouseFighterProto.Server/Dockerfile
     networks:
       - mouse-traefik
     labels:
