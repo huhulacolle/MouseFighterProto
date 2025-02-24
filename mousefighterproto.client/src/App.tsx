@@ -1,137 +1,147 @@
 import { MouseEvent, useEffect, useRef, useState } from "react";
 import * as signalR from "@microsoft/signalr";
+import Segment from "./interfaces/Segment";
+import Position from "./interfaces/Position";
 
 export default function App() {
-
-  const disableRightClick = (e: MouseEvent<HTMLDivElement>) => e.preventDefault();
+  const MIN_SEGMENT_LENGTH = 6;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const [lastPos, setLastPos] = useState<{ x: number; y: number } | null>(null);
-  const [OnCanva, setOnCanva] = useState<boolean | null>(null);
+  const [lastPos, setLastPos] = useState<Position | null>(null);
   const [connection, setConnection] = useState<signalR.HubConnection | null>(
     null
   );
-  const [ConnexionLoading, setConnexionLoading] = useState(false);
+  const [ConnexionLoading, setConnexionLoading] = useState<boolean>(false);
+
+  const segmentsRed = useRef<Segment[]>([]);
+  const segmentsBlue = useRef<Segment[]>([]);
 
   useEffect(() => {
-    testConnect();
-    const newConnection = new signalR.HubConnectionBuilder()
-      .withUrl("hub/MouseFighterHub") 
+    const connection = new signalR.HubConnectionBuilder()
+      .withUrl("hub/MouseFighterHub")
       .withAutomaticReconnect()
       .build();
 
-    setConnection(newConnection);
+    setConnection(connection);
+
+    connection.start().then(() => {
+      setConnexionLoading(true);
+
+      connection.on(
+        "ReceiveDrawing",
+        (prevPos: Position, currentPos: Position) => {
+          drawSegment(prevPos, currentPos, "blue");
+          segmentsBlue.current.push({
+            x1: prevPos.x,
+            y1: prevPos.y,
+            x2: currentPos.x,
+            y2: currentPos.y,
+          });
+        }
+      );
+
+      connection.on("ReceiveReset", clearCanvas);
+
+      connection.on("ReceiveLost", () => {        
+        alert("Tu a gagnés gg !!!");
+      })
+    });
 
     return () => {
-      newConnection.stop();
+      connection.stop();
     };
   }, []);
 
-  useEffect(() => {
-    if (connection) {
-      connection
-        .start()
-        .then(() => {
-          console.log("Connecté au hub SignalR");
-          setConnexionLoading(true);
-
-          connection.on(
-            "ReceiveDrawing",
-            (
-              prevPos: { x: number; y: number },
-              currentPos: { x: number; y: number }
-            ) => {
-              const canvas = canvasRef.current;
-              if (!canvas) return;
-              const ctx = canvas.getContext("2d");
-              if (!ctx) return;
-              ctx.beginPath();
-              ctx.moveTo(prevPos.x, prevPos.y);
-              ctx.lineTo(currentPos.x, currentPos.y);
-              ctx.lineWidth = 5;
-              ctx.lineCap = "round";
-              ctx.lineJoin = "round";
-              ctx.strokeStyle = "blue";
-              ctx.stroke();
-            }
-          );
-        })
-        .catch((err) => {
-          console.error("Erreur de connexion: ", err);
-        });
-
-        connection.on("ReceiveReset", () => {
-          clearCanvas();
-        })
-    }
-  }, [connection]);
-
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const drawSegment = (start: Position, end: Position, color: string) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+    ctx.beginPath();
+    ctx.moveTo(start.x, start.y);
+    ctx.lineTo(end.x, end.y);
+    ctx.lineWidth = 5;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = color;
+    ctx.stroke();
+  };
+
+  const distance = (p1: Position, p2: Position) => {
+    return Math.hypot(p2.x - p1.x, p2.y - p1.y);
+  };
+
+  const intersectSegments = (
+    A: Position,
+    B: Position,
+    C: Position,
+    D: Position
+  ): boolean => {
+    const det = (B.x - A.x) * (D.y - C.y) - (B.y - A.y) * (D.x - C.x);
+    if (det === 0) return false;
+
+    const lambda =
+      ((D.y - C.y) * (D.x - A.x) + (C.x - D.x) * (D.y - A.y)) / det;
+    const gamma = ((A.y - B.y) * (D.x - A.x) + (B.x - A.x) * (D.y - A.y)) / det;
+
+    return 0 < lambda && lambda < 1 && 0 < gamma && gamma < 1;
+  };
+
+  const checkCollision = (
+    newSegment: Segment,
+    segmentsOpponent: Segment[]
+  ): boolean => {
+    return segmentsOpponent.some((segment) =>
+      intersectSegments(
+        { x: newSegment.x1, y: newSegment.y1 },
+        { x: newSegment.x2, y: newSegment.y2 },
+        { x: segment.x1, y: segment.y1 },
+        { x: segment.x2, y: segment.y2 }
+      )
+    );
+  };
+
+  const handleMouseMove = async (e: MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const currentPos = {
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
-    };
+    const currentPos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
 
-    if (lastPos) {
+    if (
+      lastPos &&
+      connection &&
+      distance(lastPos, currentPos) > MIN_SEGMENT_LENGTH
+    ) {
+      const newSegment: Segment = {
+        x1: lastPos.x,
+        y1: lastPos.y,
+        x2: currentPos.x,
+        y2: currentPos.y,
+      };
 
-      const deltaX = currentPos.x - lastPos.x;
-      const deltaY = currentPos.y - lastPos.y;
-  
-      const newPos = { ...currentPos };
-  
-      if (Math.abs(deltaX) > Math.abs(deltaY)) {
-        newPos.x += deltaX > 0 ? 6 : -6;
-      } else {
-        newPos.y += deltaY > 0 ? 6 : -6;
-      }
-  
-      const colorData = ctx.getImageData(newPos.x, newPos.y, 1, 1).data;
-
-      if (colorData[2] > 0) {
+      if (checkCollision(newSegment, segmentsBlue.current)) {
+        await connection.invoke("SendLost");
         clearCanvas();
+        alert("tu as perdu !");
+        connection.invoke("SendReset");
+        return;
       }
 
-      ctx.beginPath();
-      ctx.moveTo(lastPos.x, lastPos.y);
-      ctx.lineTo(currentPos.x, currentPos.y);
-      ctx.lineWidth = 5;
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-      ctx.strokeStyle = "red";
-      ctx.stroke();
+      drawSegment(lastPos, currentPos, "red");
+      segmentsRed.current.push(newSegment);
 
-      if (connection) {
-        connection
-          .invoke("SendDrawing", lastPos, currentPos)
-          .catch((err) =>
-            console.error("Erreur lors de l'envoi du dessin: ", err)
-          );
-      }
+      connection
+        .invoke("SendDrawing", lastPos, currentPos)
+        .catch(console.error);
+
+      setLastPos(currentPos);
+    } else if (!lastPos) {
+      setLastPos(currentPos);
     }
-
-    setLastPos(currentPos);
   };
 
-  const handleMouseLeave = () => {
-    setLastPos(null);
-    setOnCanva(false);
-  };
-
-  const handleMouseEnter = () => {
-    setOnCanva(true);
-  };
-
-  const testConnect = async () => {
-    const test = await fetch("/api/Test").then((e) => e.text());
-    console.log(test);
-  };
+  const handleMouseLeave = () => setLastPos(null);
 
   const clearCanvas = () => {
     const canvas = canvasRef.current;
@@ -139,41 +149,34 @@ export default function App() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    segmentsRed.current = [];
+    segmentsBlue.current = [];
   };
 
   return (
-    <div className="flex flex-col gap-5 items-center justify-center" onContextMenu={disableRightClick}>
-      <div> {ConnexionLoading ? "Tu est connecté" : "Connexion en cours"} </div>
-      <div>
-        <input
-          className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded cursor-pointer"
-          type="button"
-          value="Reset arène"
-          onClick={() => {
-            if (connection) {
-              connection
-                .invoke("SendReset")
-            }
-            clearCanvas();
-          }}
-        />
-      </div>
-      <div>
-        {" "}
-        {OnCanva ? "Tu es dans l'arène" : "tu n'est pas dans l'arène"}{" "}
-      </div>
-      {ConnexionLoading ? (
+    <div
+      className="flex flex-col gap-5 items-center justify-center"
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      <div>{ConnexionLoading ? "Tu es connecté" : "Connexion en cours"}</div>
+      <button
+        className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded cursor-pointer"
+        onClick={() => {
+          connection?.invoke("SendReset");
+          clearCanvas();
+        }}
+      >
+        Reset arène
+      </button>
+      {ConnexionLoading && (
         <canvas
           ref={canvasRef}
           width={1080}
           height={720}
           onMouseMove={handleMouseMove}
-          onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
-          className="border w-[1080] h-[720]"
+          className="border"
         />
-      ) : (
-        ""
       )}
     </div>
   );

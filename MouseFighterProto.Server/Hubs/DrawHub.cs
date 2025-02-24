@@ -14,5 +14,10 @@ namespace MouseFighterProto.Server.Hubs
         {
             await Clients.Others.SendAsync("ReceiveReset");
         }
+
+        public async Task SendLost()
+        {
+            await Clients.Others.SendAsync("ReceiveLost");
+        }
     }
 }
