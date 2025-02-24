@@ -9,5 +9,10 @@ namespace MouseFighterProto.Server.Hubs
         {
             await Clients.Others.SendAsync("ReceiveDrawing", lastPos, currentPos);
         }
+
+        public async Task SendReset()
+        {
+            await Clients.Others.SendAsync("ReceiveReset");
+        }
     }
 }
