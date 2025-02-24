@@ -1,6 +1,6 @@
 services:
 
-  wordpress:
+  mouse-attack-proto:
     container_name: proto-mouse-attack
     image: mouse-attack:proto
     build:
