@@ -175,7 +175,7 @@ export default function App() {
           height={720}
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
-          className="border"
+          className="border cursor-none"
         />
       )}
     </div>
