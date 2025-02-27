@@ -13,6 +13,7 @@ services:
       - "traefik.http.routers.api.rule=Host(`proto.mousefighter.fr`)"
       - "traefik.http.routers.api.entrypoints=websecure"
       - "traefik.http.routers.api.tls.certresolver=myresolver"
+      - "traefik.http.middlewares.mouse-compress.compress=true"
       - "traefik.http.services.api.loadbalancer.server.port=8080"
 
 networks:
